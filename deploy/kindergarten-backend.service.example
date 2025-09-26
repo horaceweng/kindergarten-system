@@ -1,0 +1,22 @@
+[Unit]
+Description=Kindergarten Backend (NestJS)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/kindergarten/backend
+# Make sure environment file exists at /var/www/kindergarten/backend/.env
+EnvironmentFile=/var/www/kindergarten/backend/.env
+ExecStart=/usr/bin/node /var/www/kindergarten/backend/dist/main.js
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+
+# Notes:
+# - Replace User/Group with the account you want to run the app under (e.g., deploy user).
+# - Ensure the path to node and dist/main.js matches your setup.

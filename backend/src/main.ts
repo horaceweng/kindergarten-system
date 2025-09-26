@@ -20,6 +20,6 @@ async function bootstrap() {
     transformOptions: { enableImplicitConversion: true }, // 啟用隱式轉換
   }));
 
-  await app.listen(3001);
+  await app.listen(3002);
 }
 bootstrap();

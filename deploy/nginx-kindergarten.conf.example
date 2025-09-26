@@ -1,0 +1,35 @@
+server {
+    listen 80;
+    server_name kindergarten.example.com; # replace with your domain or server IP
+
+    root /var/www/kindergarten/html; # replace with your frontend build path
+    index index.html;
+
+    # Serve frontend
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API calls to backend (port 3002)
+    location /api/ {
+        proxy_pass http://127.0.0.1:3002/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # Cache static assets
+    location ~* \.(?:js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        try_files $uri =404;
+        expires 7d;
+        access_log off;
+    }
+
+    # optional: increase client body size for file uploads
+    client_max_body_size 20M;
+}

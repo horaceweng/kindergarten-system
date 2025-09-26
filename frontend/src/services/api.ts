@@ -3,8 +3,7 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: 'http://localhost:3001',
-  //baseURL: 'https://attendance-backend-v7uh.onrender.com',
+  baseURL: (import.meta.env.VITE_API_BASE_URL as string) || '/api',
 });
 
 apiClient.interceptors.request.use((config) => {
