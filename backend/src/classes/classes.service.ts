@@ -1,8 +1,8 @@
 // in src/classes/classes.service.ts --- UPDATED
 
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Role } from '@prisma/client';
+import { Role, Prisma } from '@prisma/client';
 
 @Injectable()
 export class ClassesService {
@@ -43,11 +43,9 @@ export class ClassesService {
         const enrolledClassIds = Array.from(new Set(enrollments.map(e => e.classId)));
 
         if (user.role === 'GA_specialist') {
-            // 回傳在該學年有學生註冊的班級（或所有班級，視需求可調整）
-            if (enrolledClassIds.length === 0) {
-                return this.prisma.class.findMany({ orderBy: { id: 'asc' } });
-            }
-            return this.prisma.class.findMany({ where: { id: { in: enrolledClassIds } }, orderBy: { id: 'asc' } });
+            // 管理員（GA_specialist）應該能看到所有班級，
+            // 包括剛建立但尚未有學生註冊的班級，避免前端建立後看不到新班級的情況。
+            return this.prisma.class.findMany({ orderBy: { id: 'asc' } });
         }
 
         if (user.role === 'teacher') {
@@ -73,13 +71,45 @@ export class ClassesService {
 
     async create(data: { name: string }, user: { userId: number; role: string }) {
         await this.checkIsAdmin(user);
-        return this.prisma.class.create({ data: { name: data.name } });
+        // Normalize name
+        const normalized = (data.name || '').trim();
+        if (!normalized) throw new BadRequestException('Class name cannot be empty');
+
+        // Check duplicate (case-insensitive) before attempting create using raw SQL
+        const existingRows: Array<{ id: number }> = await this.prisma.$queryRaw`
+            SELECT id FROM classes WHERE LOWER(name) = LOWER(${normalized}) LIMIT 1
+        ` as any;
+        if (existingRows && existingRows.length > 0) {
+            throw new ConflictException('班級名稱已存在');
+        }
+
+        try {
+            return await this.prisma.class.create({ data: { name: normalized } });
+        } catch (err) {
+            if (err instanceof Prisma.PrismaClientKnownRequestError) {
+                if (err.code === 'P2002') {
+                    throw new ConflictException('班級名稱已存在');
+                }
+            }
+            throw err;
+        }
     }
 
     async update(id: number, data: { name?: string }, user: { userId: number; role: string }) {
         await this.checkIsAdmin(user);
         const classRecord = await this.prisma.class.findUnique({ where: { id } });
         if (!classRecord) throw new NotFoundException(`Class with ID ${id} not found`);
+        // If updating name, normalize and check duplicates
+        if (data.name !== undefined) {
+            const normalized = (data.name || '').trim();
+            if (!normalized) throw new BadRequestException('Class name cannot be empty');
+            const existingRows: Array<{ id: number }> = await this.prisma.$queryRaw`
+                SELECT id FROM classes WHERE LOWER(name) = LOWER(${normalized}) AND id != ${id} LIMIT 1
+            ` as any;
+            if (existingRows && existingRows.length > 0) throw new ConflictException('班級名稱已存在');
+            return this.prisma.class.update({ where: { id }, data: { ...data, name: normalized } });
+        }
+
         return this.prisma.class.update({ where: { id }, data });
     }
 

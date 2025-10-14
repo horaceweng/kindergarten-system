@@ -256,7 +256,16 @@ const ClassManagementTab: React.FC = () => {
       fetchClasses(); // 重新獲取數據
       setError(null);
     } catch (err) {
-      setError("提交失敗");
+      // Handle duplicate (409) or use server-provided message
+      const anyErr = err as any;
+      if (anyErr?.response?.status === 409) {
+        const serverMessage = anyErr.response?.data?.message || '班級名稱已存在';
+        setError(serverMessage);
+      } else if (anyErr?.response?.data?.message) {
+        setError(anyErr.response.data.message);
+      } else {
+        setError('提交失敗');
+      }
       console.error(err);
     }
   };
@@ -281,7 +290,7 @@ const ClassManagementTab: React.FC = () => {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h5">班級管理</Typography>
-          <Button variant="contained" onClick={openAddDialog}>
+          <Button variant="contained" onClick={(e) => { (e.currentTarget as HTMLElement).blur(); openAddDialog(); }}>
             新增班級
           </Button>
         </Box>
@@ -325,15 +334,15 @@ const ClassManagementTab: React.FC = () => {
                     }
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={() => openEditDialog(classItem)}>
+                    <IconButton size="small" onClick={(e) => { (e.currentTarget as HTMLElement).blur(); openEditDialog(classItem); }}>
                       <EditIcon />
                     </IconButton>
-                    <IconButton size="small" onClick={() => handleDelete(classItem.id)}>
+                    <IconButton size="small" onClick={(e) => { (e.currentTarget as HTMLElement).blur(); handleDelete(classItem.id); }}>
                       <DeleteIcon />
                     </IconButton>
                     <Button 
                       size="small" 
-                      onClick={() => openAssignTeacherDialog(classItem)}
+                      onClick={(e) => { (e.currentTarget as HTMLElement).blur(); openAssignTeacherDialog(classItem); }}
                       sx={{ ml: 1 }}
                     >
                       指派導師

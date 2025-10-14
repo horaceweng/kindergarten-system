@@ -33,7 +33,7 @@ export const ReportPage: React.FC = () => {
         startDate: getTodayString(),
         endDate: getTodayString(),
         classIds: [] as string[],
-        statuses: [] as string[],
+        status: '' as string, // single-select status
         ageFilter: 'all',
     });
     const [classes, setClasses] = React.useState<{id:number,name:string}[]>([]);
@@ -81,9 +81,9 @@ export const ReportPage: React.FC = () => {
         }
     };
     
-    const handleMultiSelectChange = (event: SelectChangeEvent<string[]>) => {
-        const { name, value } = event.target;
-        setFilters(prev => ({ ...prev, [name!]: typeof value === 'string' ? value.split(',') : value }));
+    const handleStatusChangeSingle = (event: SelectChangeEvent) => {
+        const { value } = event.target;
+        setFilters(prev => ({ ...prev, status: value }));
     };
 
     const handleApproveLeave = async (leaveId: number) => {
@@ -135,7 +135,8 @@ export const ReportPage: React.FC = () => {
                 : { classIds: filters.classIds };
 
             if (reportType === 'attendance') {
-                const apiParams = { startDate: filters.startDate, endDate: filters.endDate, statuses: filters.statuses, ...classParams };
+                const apiParams: any = { startDate: filters.startDate, endDate: filters.endDate, ...classParams };
+                if (filters.status) apiParams.statuses = [filters.status];
                 res = await api.getAttendanceReport(apiParams);
             } else if (reportType === 'pending_leave') {
                 const apiParams = { ageFilter: filters.ageFilter === 'all' ? undefined : filters.ageFilter, ...classParams };
@@ -288,7 +289,22 @@ export const ReportPage: React.FC = () => {
             {error && <Alert severity="error" sx={{mb: 2}}>{error}</Alert>}
             
             {/* 篩選器區域 */}
-            {reportType === 'attendance' && <Paper sx={{p: 2, mb: 3}}><Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2}}><TextField name="startDate" label="開始日期" type="date" value={filters.startDate} onChange={handleTextFieldChange} InputLabelProps={{shrink: true}}/><TextField name="endDate" label="結束日期" type="date" value={filters.endDate} onChange={handleTextFieldChange} InputLabelProps={{shrink: true}}/><ClassFilter/><FormControl fullWidth><InputLabel>出勤狀況</InputLabel><Select name="statuses" multiple value={filters.statuses} onChange={handleMultiSelectChange} input={<OutlinedInput label="出勤狀況" />} renderValue={(selected) => selected.map(s => formatStatus(s, null)).join(', ')}>{STATUS_OPTIONS.map(status => (<MenuItem key={status} value={status}>{formatStatus(status, null)}</MenuItem>))}</Select></FormControl></Box></Paper>}
+            {reportType === 'attendance' && (
+                <Paper sx={{p: 2, mb: 3}}>
+                    <Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2}}>
+                        <TextField name="startDate" label="開始日期" type="date" value={filters.startDate} onChange={handleTextFieldChange} InputLabelProps={{shrink: true}}/>
+                        <TextField name="endDate" label="結束日期" type="date" value={filters.endDate} onChange={handleTextFieldChange} InputLabelProps={{shrink: true}}/>
+                        <ClassFilter/>
+                        <FormControl fullWidth>
+                            <InputLabel>出勤狀況</InputLabel>
+                            <Select name="status" value={filters.status} onChange={handleStatusChangeSingle} input={<OutlinedInput label="出勤狀況" />}>
+                                <MenuItem value="">(全部)</MenuItem>
+                                {STATUS_OPTIONS.map(status => (<MenuItem key={status} value={status}>{formatStatus(status, null)}</MenuItem>))}
+                            </Select>
+                        </FormControl>
+                    </Box>
+                </Paper>
+            )}
             {reportType === 'pending_leave' && <Paper sx={{p: 2, mb: 3}}><Box sx={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2}}><ClassFilter /><FormControl fullWidth><InputLabel>假單建立時間</InputLabel><Select name="ageFilter" value={filters.ageFilter} label="假單建立時間" onChange={handleSelectChange}><MenuItem value="all">全部</MenuItem><MenuItem value="within_3_days">三日內</MenuItem><MenuItem value="over_3_days">大於三日</MenuItem></Select></FormControl></Box></Paper>}
             {reportType === 'unresolved_absence' && <Paper sx={{p: 2, mb: 3}}><Box sx={{display: 'grid', gridTemplateColumns: '1fr', gap: 2}}><ClassFilter /></Box></Paper>}
             

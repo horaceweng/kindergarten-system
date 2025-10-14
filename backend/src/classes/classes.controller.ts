@@ -16,7 +16,12 @@ export class ClassesController {
     
     @Post()
     create(@Body() data: { name: string; description?: string }, @Request() req) {
-        return this.classesService.create(data, req.user);
+        try {
+            return this.classesService.create(data, req.user);
+        } catch (err) {
+            console.error('[ClassesController] Error in create:', err);
+            throw err;
+        }
     }
     
     @Put(':id')

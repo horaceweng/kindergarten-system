@@ -95,7 +95,25 @@ const StudentManagementTab: React.FC = () => {
           api.getGrades()
         ]);
         
-        setStudents(studentsResponse.data);
+        // sort students by their current class name (students without class go last)
+        const rawStudents: Student[] = studentsResponse.data;
+        const sortedStudents = rawStudents.slice().sort((a, b) => {
+          const aClassId = a.enrollments && a.enrollments.length > 0 ? a.enrollments[0].classId : null;
+          const bClassId = b.enrollments && b.enrollments.length > 0 ? b.enrollments[0].classId : null;
+
+          const aClassName = aClassId ? (classesResponse.data.find((c: Class) => c.id === aClassId)?.name || '') : '';
+          const bClassName = bClassId ? (classesResponse.data.find((c: Class) => c.id === bClassId)?.name || '') : '';
+
+          // students without class should come last
+          if (!aClassName && bClassName) return 1;
+          if (aClassName && !bClassName) return -1;
+
+          // otherwise compare by class name, then by student name
+          const cmp = aClassName.localeCompare(bClassName);
+          return cmp !== 0 ? cmp : a.name.localeCompare(b.name);
+        });
+
+        setStudents(sortedStudents);
         
         // 獲取所有班級
         const allClasses = classesResponse.data;
@@ -212,13 +230,25 @@ const StudentManagementTab: React.FC = () => {
       
   // Prefill gradeId from the student's latest enrollment if available
   const currentGradeId = student.enrollments && student.enrollments.length > 0 ? student.enrollments[0].gradeId : '';
+    // Normalize date strings to yyyy-MM-dd for date inputs
+    const normalizeDate = (v: string | null | undefined) => {
+      if (!v) return '';
+      // if already in yyyy-MM-dd, keep it
+      if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+      // try ISO
+      const idx = v.indexOf('T');
+      if (idx !== -1) return v.slice(0, idx);
+      // fallback to first 10 chars
+      return v.slice(0, 10);
+    };
+
     setStudentForm({
       name: student.name,
-      birthday: student.birthday,
+      birthday: normalizeDate(student.birthday as any),
       gender: student.gender,
       status: student.status,
-      enrollmentDate: student.enrollmentDate,
-      departureDate: student.departureDate,
+      enrollmentDate: normalizeDate(student.enrollmentDate as any),
+      departureDate: student.departureDate ? normalizeDate(student.departureDate) : null,
       departureReason: student.departureReason,
       classId: currentClassId,
       gradeId: currentGradeId || ''
@@ -243,20 +273,20 @@ const StudentManagementTab: React.FC = () => {
     try {
       // 檢查必填欄位
       if (!studentForm.name || !studentForm.birthday || !studentForm.gender) {
-        setError("請填寫所有必填欄位");
+        setError('請填寫所有必填欄位');
         return;
       }
-      
+
       // 新增學生與轉入學生都必須選擇班級
       if ((dialogMode === 'new' || dialogMode === 'transfer') && !studentForm.classId) {
-        setError("請選擇班級");
+        setError('請選擇班級');
         return;
       }
-      
-      let studentId;
-      
+
+      let studentId: number | undefined;
+
       if (currentStudent) {
-        // 更新學生狀態
+        // 更新學生基本資料/狀態
         await api.updateStudent(currentStudent.id, studentForm);
         studentId = currentStudent.id;
       } else {
@@ -264,33 +294,77 @@ const StudentManagementTab: React.FC = () => {
         const response = await api.createStudent(studentForm);
         studentId = response.data.id;
       }
-      
-      // 如果有選擇班級且是新增或轉入狀態，創建班級註冊
-      if (studentForm.classId && (dialogMode === 'new' || dialogMode === 'transfer')) {
-        // 獲取當前活躍學年
-        const academicYearsResponse = await api.getAcademicYears();
-        const activeYear = academicYearsResponse.data.find((y: any) => y.isActive);
-        
-        if (activeYear) {
-          // 創建學生的班級註冊
-          await api.createStudentEnrollment({
-            studentId: studentId,
-            classId: studentForm.classId,
-            schoolYear: activeYear.year,
-            gradeId: studentForm.gradeId || undefined,
-          });
-        } else {
-          setError("無法創建班級註冊：找不到活躍學年");
+
+      // 處理班級註冊
+      if (dialogMode === 'new' || dialogMode === 'transfer') {
+        if (studentForm.classId && studentId) {
+          const academicYearsResponse = await api.getAcademicYears();
+          const activeYear = academicYearsResponse.data.find((y: any) => y.isActive);
+          if (activeYear) {
+            await api.createStudentEnrollment({
+              studentId,
+              classId: studentForm.classId,
+              schoolYear: activeYear.year,
+              gradeId: studentForm.gradeId || undefined,
+            });
+          } else {
+            setError('無法創建班級註冊：找不到活躍學年');
+          }
+        }
+      } else if (dialogMode === 'update' && currentStudent && studentId) {
+        const currentEnrollment = currentStudent.enrollments && currentStudent.enrollments.length > 0 ? currentStudent.enrollments[0] : null;
+        try {
+          if (currentEnrollment) {
+            if (studentForm.classId && Number(studentForm.classId) !== currentEnrollment.classId) {
+              await api.updateStudentEnrollment(currentEnrollment.id, {
+                classId: Number(studentForm.classId),
+                gradeId: studentForm.gradeId || undefined,
+              });
+            }
+          } else {
+            if (studentForm.classId) {
+              const academicYearsResponse = await api.getAcademicYears();
+              const activeYear = academicYearsResponse.data.find((y: any) => y.isActive);
+              if (activeYear) {
+                await api.createStudentEnrollment({
+                  studentId,
+                  classId: studentForm.classId,
+                  schoolYear: activeYear.year,
+                  gradeId: studentForm.gradeId || undefined,
+                });
+              } else {
+                setError('無法創建班級註冊：找不到活躍學年');
+              }
+            }
+          }
+        } catch (err) {
+          console.error('更新班級註冊失敗', err);
+          setError('更新班級失敗');
         }
       }
-      
-      // 重新獲取學生列表
-      const response = await api.getStudents({ status: filterStatus !== 'all' ? filterStatus : undefined });
-      setStudents(response.data);
+
+      // 重新獲取學生列表並保持按班級排序
+      const response = await api.getStudents({ status: filterStatus !== 'all' ? filterStatus : undefined, includeEnrollments: true });
+      const refreshedStudents: Student[] = response.data;
+      const sortedRefreshed = refreshedStudents.slice().sort((a, b) => {
+        const aClassId = a.enrollments && a.enrollments.length > 0 ? a.enrollments[0].classId : null;
+        const bClassId = b.enrollments && b.enrollments.length > 0 ? b.enrollments[0].classId : null;
+
+        const aClassName = aClassId ? (classes.find(c => c.id === aClassId)?.name || '') : '';
+        const bClassName = bClassId ? (classes.find(c => c.id === bClassId)?.name || '') : '';
+
+        if (!aClassName && bClassName) return 1;
+        if (aClassName && !bClassName) return -1;
+
+        const cmp = aClassName.localeCompare(bClassName);
+        return cmp !== 0 ? cmp : a.name.localeCompare(b.name);
+      });
+
+      setStudents(sortedRefreshed);
       setDialogOpen(false);
       setError(null);
     } catch (err) {
-      setError("提交失敗");
+      setError('提交失敗');
       console.error(err);
     }
   };

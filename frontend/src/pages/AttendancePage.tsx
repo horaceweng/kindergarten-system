@@ -18,6 +18,7 @@ const getTodayString = () => new Date().toISOString().split('T')[0];
 export const AttendancePage: React.FC = () => {
     const [classes, setClasses] = useState<Class[]>([]);
     const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
+    const [originalAttendanceMap, setOriginalAttendanceMap] = useState<Map<number, string>>(new Map());
     
     const [selectedClass, setSelectedClass] = useState('');
     const [selectedDate, setSelectedDate] = useState(getTodayString());
@@ -38,6 +39,8 @@ export const AttendancePage: React.FC = () => {
             setSuccess('');
             const res = await api.getAttendanceForClass(Number(selectedClass), selectedDate);
             setAttendanceData(res.data);
+            const origMap = new Map<number, string>(res.data.map((r: AttendanceRecord) => [r.studentId, r.status]));
+            setOriginalAttendanceMap(origMap);
             setLoading(false);
         } catch (err) {
             setError('無法載入學生出缺勤資料');
@@ -63,8 +66,16 @@ export const AttendancePage: React.FC = () => {
             setError('');
             setSuccess('');
             
+            // Submit only records whose status changed compared to the original snapshot
+            // and are not 'on_leave'. This preserves the original design but allows
+            // explicit edits (e.g. absent -> present) to be persisted.
             const recordsToSubmit = attendanceData
-                .filter(record => record.status !== 'on_leave')
+                .filter(record => {
+                    const orig = originalAttendanceMap.get(record.studentId) || 'present';
+                    if (record.status === orig) return false;
+                    if (record.status === 'on_leave') return false;
+                    return true;
+                })
                 .map(({ studentId, status }) => ({ studentId, status }));
 
             await api.submitAttendance(Number(selectedClass), {

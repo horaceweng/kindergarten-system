@@ -84,22 +84,13 @@ export class ReportsService {
                 const enrollment = student.enrollments.find(e => e.schoolYear === reportYear);
                 if (!enrollment) continue;
 
+                // Start with default present
                 let finalStatus = 'present';
                 let leaveTypeName: string | null = null;
                 let note: string | null = null;
                 let id = `virtual-${student.id}-${currentDate.getTime()}`;
 
-                const leave = leaveExceptions.find(l => 
-                    l.studentId === student.id &&
-                    currentDate >= new Date(new Date(l.startDate).setUTCHours(0,0,0,0)) &&
-                    currentDate <= new Date(new Date(l.endDate).setUTCHours(0,0,0,0))
-                );
-                if (leave) {
-                    finalStatus = 'on_leave';
-                    leaveTypeName = leave.leaveType.name;
-                    id = `leave-${leave.id}`;
-                }
-
+                // If there's an attendance record for this date, use it as the base
                 const attendance = attendanceExceptions.find(a => 
                     a.studentId === student.id &&
                     new Date(a.attendanceDate).getTime() === currentDate.getTime()
@@ -109,6 +100,19 @@ export class ReportsService {
                     leaveTypeName = attendance.leaveType?.name || null;
                     note = attendance.note;
                     id = `att-${attendance.id}`;
+                }
+
+                // Then check for leaveRequests that cover this date. If found and status is pending/approved, prefer the leave (override attendance)
+                const leave = leaveExceptions.find(l => 
+                    l.studentId === student.id &&
+                    currentDate >= new Date(new Date(l.startDate).setUTCHours(0,0,0,0)) &&
+                    currentDate <= new Date(new Date(l.endDate).setUTCHours(0,0,0,0))
+                );
+                if (leave) {
+                    // prefer leaveRequests (pending/approved) over attendanceRecords
+                    finalStatus = 'on_leave';
+                    leaveTypeName = leave.leaveType.name;
+                    id = `leave-${leave.id}`;
                 }
                 
                 // Determine leave status if it's a leave record
