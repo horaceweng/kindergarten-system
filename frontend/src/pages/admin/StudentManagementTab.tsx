@@ -277,9 +277,9 @@ const StudentManagementTab: React.FC = () => {
         return;
       }
 
-      // 新增學生與轉入學生都必須選擇班級
-      if ((dialogMode === 'new' || dialogMode === 'transfer') && !studentForm.classId) {
-        setError('請選擇班級');
+      // 新增學生與轉入學生都必須選擇班級和年級
+      if ((dialogMode === 'new' || dialogMode === 'transfer') && (!studentForm.classId || !studentForm.gradeId)) {
+        setError('請選擇班級和年級');
         return;
       }
 
@@ -305,7 +305,7 @@ const StudentManagementTab: React.FC = () => {
               studentId,
               classId: studentForm.classId,
               schoolYear: activeYear.year,
-              gradeId: studentForm.gradeId || undefined,
+              gradeId: studentForm.gradeId,
             });
           } else {
             setError('無法創建班級註冊：找不到活躍學年');
@@ -330,7 +330,7 @@ const StudentManagementTab: React.FC = () => {
                   studentId,
                   classId: studentForm.classId,
                   schoolYear: activeYear.year,
-                  gradeId: studentForm.gradeId || undefined,
+                  gradeId: studentForm.gradeId,
                 });
               } else {
                 setError('無法創建班級註冊：找不到活躍學年');
